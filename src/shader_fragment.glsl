@@ -19,10 +19,13 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE 0
-#define BUNNY  1
+#define TABLE  0
+#define STICK  1
 #define PLANE  2
 #define LAMP   3
+#define G_BALL 4
+#define W_BALL 5
+
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -30,9 +33,12 @@ uniform vec4 bbox_min;
 uniform vec4 bbox_max;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D TextureImage0;
-uniform sampler2D TextureImage1;
-uniform sampler2D TextureImage2;
+uniform sampler2D TextureImage0; //Piso madeira
+uniform sampler2D TextureImage1; //Mesa e taco
+uniform sampler2D TextureImage2; //Luz
+uniform sampler2D TextureImage3; //Luz emissiva
+uniform sampler2D TextureImage4; //Bolas verdes
+uniform sampler2D TextureImage5; //Bola branca
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -68,76 +74,58 @@ void main()
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
 
+    // Vetor que define o sentido da reflexão especular ideal.
+    vec4 h = normalize(v + l);
+
     // Coordenadas de textura U e V
     float U = 0.0;
     float V = 0.0;
 
-    if ( object_id == SPHERE )
+    vec3 Ks0 = vec3(0); //indíce de refração
+    vec3 Kd0 = vec3(0);
+    vec3 emmisive = vec3(0);
+    float q = 0;
+
+    if ( object_id == TABLE || object_id == STICK)
     {
-        // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
-        // projeção esférica EM COORDENADAS DO MODELO. Utilize como referência
-        // o slides 134-150 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // A esfera que define a projeção deve estar centrada na posição
-        // "bbox_center" definida abaixo.
+        Kd0 = texture(TextureImage1, texcoords).rgb;
+        Ks0 = vec3(0);
 
-        // Você deve utilizar:
-        //   função 'length( )' : comprimento Euclidiano de um vetor
-        //   função 'atan( , )' : arcotangente. Veja https://en.wikipedia.org/wiki/Atan2.
-        //   função 'asin( )'   : seno inverso.
-        //   constante M_PI
-        //   variável position_model
-
-        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
-
-        vec4 vector = normalize(p - bbox_center);//vetor que sai do centro da esfera, passa pelo fragmento e 'para' na posição correta
-
-        vec4 p_text = bbox_center + vector;
-
-        float theta = atan(p_text[0],p_text[2]);
-        float phi = asin(p_text[1]);
-
-        U = (theta + M_PI)/(2*M_PI);
-        V = (phi + M_PI_2)/(M_PI);
     }
-    else if ( object_id == BUNNY )
-    {
-        // PREENCHA AQUI as coordenadas de textura do coelho, computadas com
-        // projeção planar XY em COORDENADAS DO MODELO. Utilize como referência
-        // o slides 99-104 do documento Aula_20_Mapeamento_de_Texturas.pdf,
-        // e também use as variáveis min*/max* definidas abaixo para normalizar
-        // as coordenadas de textura U e V dentro do intervalo [0,1]. Para
-        // tanto, veja por exemplo o mapeamento da variável 'p_v' utilizando
-        // 'h' no slides 158-160 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // Veja também a Questão 4 do Questionário 4 no Moodle.
-
-        float minx = bbox_min.x;
-        float maxx = bbox_max.x;
-
-        float miny = bbox_min.y;
-        float maxy = bbox_max.y;
-
-        float minz = bbox_min.z;
-        float maxz = bbox_max.z;
-
-        U = (p[0]- minx)/(maxx-minx);
-        V = (p[1]- miny)/(maxy-miny);
-    }
-    else if ( object_id == PLANE )
+    else if ( object_id == PLANE)
     {
         // Coordenadas de textura do plano, obtidas do arquivo OBJ.
         U = texcoords.x;
         V = texcoords.y;
+        Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+        Ks0 = vec3(0.4,0.4,0.4);
+        q = 200;
     }
-    else{
-        
+    else if (object_id == LAMP){
+        Kd0 = texture(TextureImage2, texcoords).rgb;
+        emmisive = texture(TextureImage3, texcoords).rgb;
     }
-    // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-    vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+    else if (object_id == G_BALL){
+        Kd0 = texture(TextureImage4, texcoords).rgb;
+        q = 30;
+        Ks0 = vec3(0.7,0.7,0.7);
+        // as texcoords dá bola não foram bem definidas, mas não tem problema
+        // pois a ideia é a bola ter uma única cor mesmo
+    }
+    else if (object_id == W_BALL){
+        Kd0 = texture(TextureImage5, vec2(0.5,0.5)).rgb;
+        q = 50;
+        Ks0 = vec3(0.7,0.7,0.7);
+        // peguei um ponto qualquer da textura, pois ela é completamente branca
+    }
+
 
     // Equação de Iluminação
     float lambert = max(0,dot(n,l));
 
-    color.rgb = Kd0 * (lambert + 0.01);
+    vec3 blinn_phong_specular_term  = Ks0 * max(0.0,pow(dot(n,h),q));
+
+    color.rgb = Kd0 * (lambert + 0.01) + emmisive + blinn_phong_specular_term;
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
