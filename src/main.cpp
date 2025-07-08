@@ -47,6 +47,7 @@
 // Headers locais, definidos na pasta "include/"
 #include "utils.h"
 #include "matrices.h"
+#include "balls.hpp"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -106,20 +107,16 @@ struct ObjModel
     }
 };
 
-struct ball
-{
-    glm::mat4 model = Matrix_Identity();
-    int tipo = 4; //4 = G_BALL 5 = W_BALL
-    bool visivel = true;
-};
+
 
 class Camera
 {
 public:
-    float g_CameraTheta = -1.57075; // Ângulo no plano ZX em relação ao eixo Z
+    float g_CameraTheta = 3.14159; // Ângulo no plano ZX em relação ao eixo Z
     float g_CameraPhi = 1.57075;   // Ângulo em relação ao eixo Y
-    float g_CameraDistance = 7.0f; // Distância da câmera para a origem
+    float g_CameraDistance = 4.5f; // Distância da câmera para a origem
     float cam_speed = 1.50f;
+    bool PerspectiveProjection = false; //inicia com câmera ortográfica
 
     glm::vec4 position_c = glm::vec4(0.0,0.0,0.0,1.0f); //Ponto "c", centro da câmera
     glm::vec4 lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
@@ -131,42 +128,67 @@ public:
                         // 2 - look-at da bola
 
     Camera(){ //construtor da classe, necessário pra calcular a posição da Câmera no começo
-        calc_postion();
+        calc_position();
         view_vector = lookat_l - position_c; // Vetor "view", sentido para onde a câmera está virada
-
     }
 
     void change_mode(int x){
         if (x == 0){
-            g_CameraTheta = -1.57075f; // Ângulo no plano ZX em relação ao eixo Z
+            g_CameraTheta = 3.14159f; // Ângulo no plano ZX em relação ao eixo Z
             g_CameraPhi = 1.57075f;   // Ângulo em relação ao eixo Y
-            g_CameraDistance = 7.0f; // Distância da câmera para a origem
+            g_CameraDistance = 4.5f; // Distância da câmera para a origem
             cam_mode = 0;
+            PerspectiveProjection = false;
+            lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f);
         }
         if (x == 1){
             cam_mode = 1;
-            //FONTE: chat-gpt me ajudou na linha abaixo
-            g_CameraTheta = atan2(view_vector.x, view_vector.z); 
+            //FONTE: chatgpt me ajudou na linha abaixo
+            g_CameraTheta = atan2(view_vector.x, view_vector.z);
+            PerspectiveProjection = true;
         }
     }
 
-    void calc_postion(){
+    void change_mode(Ball& bola){
+        g_CameraTheta = 3.14159f; // Ângulo no plano ZX em relação ao eixo Z
+        g_CameraPhi = 1.57075f;   // Ângulo em relação ao eixo Y
+        g_CameraDistance = 1.0f; // Distância da câmera para a origem
+        cam_mode = 2;
+        PerspectiveProjection = true;
+        calc_position(bola);
+    }
+
+
+
+    void calc_position(){
         if (cam_mode == 0){
             float r = g_CameraDistance;
             float y = r*sin(g_CameraPhi);
             float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
             float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
             position_c  = glm::vec4(x,y,z,1.0f);
-            view_vector = lookat_l - position_c;
+            view_vector = glm::normalize(lookat_l - position_c);
         }
-        if (cam_mode == 1){
+        else if (cam_mode == 1){
             view_vector.x = cos(g_CameraPhi) * sin(g_CameraTheta);
             view_vector.y = sin(-g_CameraPhi);
             view_vector.z = cos(g_CameraPhi) * cos(g_CameraTheta);
             view_vector.w = 0.0f;
         }
     }
+
+    void calc_position(Ball& bola){
+        float r = g_CameraDistance;
+        float y = r*sin(g_CameraPhi);
+        float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
+        float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+        glm::vec4 offset = glm::vec4(-0.6,0,0,0); //por algum motivo, a coordenada (0,0,0) fica fora da bola
+        lookat_l = glm::vec4(bola.getPosition(),1.0f) + offset;
+        position_c  = glm::vec4(x,y,z,0.0f) + lookat_l;
+        view_vector = glm::normalize(lookat_l - position_c);
+    }
 };
+void simulateBalls(std::vector<Ball>& balls, float time,float extraTime);
 
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
@@ -228,7 +250,7 @@ struct SceneObject
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
-//VICENTE: lembrar de limpar as variáveis globais inúteis
+//LEMBRAR: lembrar de limpar as variáveis globais inúteis
 
 // A cena virtual é uma lista de objetos nomeados, guardados em um dicionário
 // (map).  Veja dentro da função BuildTrianglesAndAddToVirtualScene() como que são incluídos
@@ -268,8 +290,6 @@ float g_ForearmAngleX = 0.0f;
 float g_TorsoPositionX = 0.0f;
 float g_TorsoPositionY = 0.0f;
 
-// Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
-bool g_UsePerspectiveProjection = true;
 
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
@@ -286,7 +306,7 @@ GLint g_bbox_max_uniform;
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
-struct ball bolas[16]; //array de bolas
+std::vector<struct Ball> bolas(16); //array de bolas
 
 int main(int argc, char* argv[])
 {
@@ -405,31 +425,35 @@ int main(int argc, char* argv[])
     glFrontFace(GL_CCW);
 
     
-    bolas[0].model = Matrix_Translate(3.1f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);
+    bolas[0].model = Matrix_Translate(2.5f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);
     bolas[0].tipo = 5;
 
-    bolas[1].model = Matrix_Translate(0.0f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);         //1
-    bolas[2].model = Matrix_Translate(-0.175f,1.67f,0.1f) * Matrix_Scale(0.4,0.4,0.4);      //2
-    bolas[3].model = Matrix_Translate(-0.175f,1.67f,-0.1f) * Matrix_Scale(0.4,0.4,0.4);     //2
-    bolas[4].model = Matrix_Translate(-0.35f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);       //3
-    bolas[5].model = Matrix_Translate(-0.35f,1.67f,0.2f) * Matrix_Scale(0.4,0.4,0.4);       //3
-    bolas[6].model = Matrix_Translate(-0.35f,1.67f,-0.2f) * Matrix_Scale(0.4,0.4,0.4);      //3
-    bolas[7].model = Matrix_Translate(-0.525f,1.67f,0.1f) * Matrix_Scale(0.4,0.4,0.4);      //4
-    bolas[8].model = Matrix_Translate(-0.525f,1.67f,-0.1f) * Matrix_Scale(0.4,0.4,0.4);     //4
-    bolas[9].model = Matrix_Translate(-0.525f,1.67f,0.3f) * Matrix_Scale(0.4,0.4,0.4);      //4
-    bolas[10].model = Matrix_Translate(-0.525f,1.67f,-0.3f) * Matrix_Scale(0.4,0.4,0.4);    //4
-    bolas[11].model = Matrix_Translate(-0.7f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);       //5
-    bolas[12].model = Matrix_Translate(-0.7f,1.67f,0.2f) * Matrix_Scale(0.4,0.4,0.4);       //5
-    bolas[13].model = Matrix_Translate(-0.7f,1.67f,-0.2f) * Matrix_Scale(0.4,0.4,0.4);      //5
-    bolas[14].model = Matrix_Translate(-0.7f,1.67f,0.4f) * Matrix_Scale(0.4,0.4,0.4);       //5
-    bolas[15].model = Matrix_Translate(-0.7f,1.67f,-0.4f) * Matrix_Scale(0.4,0.4,0.4);      //5
+    bolas[1].model = Matrix_Translate(-0.4f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);         //1
+    bolas[2].model = Matrix_Translate(-0.575f,1.67f,0.1f) * Matrix_Scale(0.4,0.4,0.4);      //2
+    bolas[3].model = Matrix_Translate(-0.575f,1.67f,-0.1f) * Matrix_Scale(0.4,0.4,0.4);     //2
+    bolas[4].model = Matrix_Translate(-0.75f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);       //3
+    bolas[5].model = Matrix_Translate(-0.75f,1.67f,0.2f) * Matrix_Scale(0.4,0.4,0.4);       //3
+    bolas[6].model = Matrix_Translate(-0.75f,1.67f,-0.2f) * Matrix_Scale(0.4,0.4,0.4);      //3
+    bolas[7].model = Matrix_Translate(-0.925f,1.67f,0.1f) * Matrix_Scale(0.4,0.4,0.4);      //4
+    bolas[8].model = Matrix_Translate(-0.925f,1.67f,-0.1f) * Matrix_Scale(0.4,0.4,0.4);     //4
+    bolas[9].model = Matrix_Translate(-0.925f,1.67f,0.3f) * Matrix_Scale(0.4,0.4,0.4);      //4
+    bolas[10].model = Matrix_Translate(-0.925f,1.67f,-0.3f) * Matrix_Scale(0.4,0.4,0.4);    //4
+    bolas[11].model = Matrix_Translate(-1.1f,1.67f,0.0f) * Matrix_Scale(0.4,0.4,0.4);       //5
+    bolas[12].model = Matrix_Translate(-1.1f,1.67f,0.2f) * Matrix_Scale(0.4,0.4,0.4);       //5
+    bolas[13].model = Matrix_Translate(-1.1f,1.67f,-0.2f) * Matrix_Scale(0.4,0.4,0.4);      //5
+    bolas[14].model = Matrix_Translate(-1.1f,1.67f,0.4f) * Matrix_Scale(0.4,0.4,0.4);       //5
+    bolas[15].model = Matrix_Translate(-1.1f,1.67f,-0.4f) * Matrix_Scale(0.4,0.4,0.4);      //5
 
+    //bolas[15].model = Matrix_Translate(3.47f,1.67f,1.405f) * Matrix_Scale(0.4,0.4,0.4); um dos buracos
 
     //bolas[15].model = Matrix_Translate(-1.8f,1.67f,-1.4f) * Matrix_Scale(0.4,0.4,0.4);      //5
     //checando para ver se o tamanho das bolas não estava muito grande
 
     float PastTime = 0.0f; // mede a passagem de tempo no programa
+    float extraTime = 0.0f; //tempo extra acrescentado quando a bola branca é derrubada
 
+    float strenght = 0; // o quão forte vai ser a tacada
+    bool mudaCamera = false; //força troca da câmera após tacada
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
@@ -455,9 +479,17 @@ int main(int argc, char* argv[])
         // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
         // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
         // e ScrollCallback().
-        
-        camera.calc_postion();
+        if(mudaCamera == true){
+            camera.change_mode(0);
+            mudaCamera = false;
+        }
 
+
+        if(camera.cam_mode == 2) camera.calc_position(bolas[0]);
+        else camera.calc_position();
+
+        //camera.position_c = glm::vec4(2.5f,1.67f,0.0f,1);
+        //camera.position_c = glm::vec4(2.0f,1.67f,0.0f,1);
         float Time = glfwGetTime();
         float currentTime = Time - PastTime;
         PastTime = Time;
@@ -479,7 +511,43 @@ int main(int argc, char* argv[])
             }
         }
 
-        
+        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS){
+                bolas[0].speed = glm::vec3(-1,0,0);
+        }
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS){
+                bolas[0].speed = glm::vec3(1,0,0);
+        }
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS){
+                bolas[0].speed = glm::vec3(0,0,-1);
+        }
+        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS){
+                bolas[0].speed = glm::vec3(0,0,1);
+        }
+
+        if(camera.cam_mode == 2){
+            if(g_RightMouseButtonPressed){
+                strenght += currentTime;
+                if(strenght > 3) strenght = 3.0f;
+            }
+            else if(strenght > 0){
+                glm::vec3 plano = glm::normalize(glm::vec3(camera.view_vector.x,0.0f,camera.view_vector.z));
+                glm::vec3 original = glm::normalize(glm::vec3(camera.view_vector));
+                float proximidade = glm::dot(plano,original);
+                bolas[0].speed = plano * proximidade * strenght * 2.5f; // 1.5 é um valor arbitrário que eu escolhi
+                mudaCamera = true;
+                strenght = 0;
+            }
+
+        }
+
+
+
+
+
+
+        //antes de desenhar, tratamos as colisões
+        simulateBalls(bolas,currentTime,extraTime);
+
         // Computamos a matriz "View" utilizando os parâmetros da câmera para
         // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
         glm::mat4 view = Matrix_Camera_View(camera.position_c, camera.view_vector, camera.up_vector);
@@ -492,11 +560,11 @@ int main(int argc, char* argv[])
         float nearplane = -0.1f;  // Posição do "near plane"
         float farplane  = -50.0f; // Posição do "far plane"
 
-        if (g_UsePerspectiveProjection)
+        if (camera.PerspectiveProjection)
         {
             // Projeção Perspectiva.
             // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
-            float field_of_view = 3.141592 / 3.0f;
+            float field_of_view = 3.141592 / 2.5f;
             projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
         }
         else
@@ -530,7 +598,7 @@ int main(int argc, char* argv[])
 
                
         // Desenhamos o modelo da mesa
-        model = Matrix_Translate(0.0f,-1.4f,0.0f)
+        model = Matrix_Translate(-0.4f,-1.4f,0.0f)
                 * Matrix_Scale(3,3,3);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, TABLE);
@@ -541,8 +609,51 @@ int main(int argc, char* argv[])
         }
 
         // Desenhamos o modelo do taco
-        model = Matrix_Translate(0.0f,1.0f,0.0f)
+        if(camera.cam_mode == 2){
+            //FONTE: forte auxílio do gpt, não consegui por nada ajustar o taco com a câmera
+            glm::vec3 camPos   = glm::vec3(camera.position_c);
+            glm::vec3 camFront = glm::normalize(glm::vec3(-camera.view_vector)); // -view → “para frente”
+            glm::vec3 worldUp  = {0,1,0};
+
+            glm::vec3 camRight = glm::normalize(glm::cross(worldUp, camFront));
+            glm::vec3 camUp    = glm::normalize(glm::cross(camFront, camRight));
+
+            // --- deslocamento fixo do taco em espaço‑câmera ----------------------
+            const glm::vec3 cueCamSpace = { 0.15f, -0.1f, 0.2f }; // ←, ↓, à frente (ajuste à vontade)
+            const glm::vec3 cuePivot    = { 0.383246f, 1.343617f, -0.430053f }; // centro geom. do modelo
+            const glm::mat4 cueScale    = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+
+            // posição final em mundo
+            glm::vec3 cueWorldPos =
+                camPos
+                + camRight * cueCamSpace.x
+                + camUp    * cueCamSpace.y
+                + camFront * cueCamSpace.z;
+
+            glm::vec3 f =  glm::normalize(camRight);   // forward  (‑Z do objeto)
+            glm::vec3 u =  glm::normalize(-camUp);     // up       (+Y do objeto)
+            glm::vec3 r =  glm::normalize(glm::cross(u, f)); // right (+X do objeto)
+            u            = glm::cross(f, r);                 // re‑ortogonaliza (garantia)
+
+            // monta a rotação: colunas = r, u, ‑f
+            glm::mat4 rot = Matrix(
+                r.x,  u.x, -f.x, 0.0f,   // linha 0
+                r.y,  u.y, -f.y, 0.0f,   // linha 1
+                r.z,  u.z, -f.z, 0.0f,   // linha 2
+                0.0f, 0.0f,  0.0f, 1.0f  // linha 3
+            );
+            // model‑matrix completa
+            model =
+                Matrix_Translate(cueWorldPos.x,cueWorldPos.y,cueWorldPos.z) *
+                rot *
+                Matrix_Translate(-cuePivot.x,-cuePivot.y,-cuePivot.z) *
+                cueScale;
+        }
+        else{
+            model = Matrix_Translate(0.0f,-20.0f,0.0f)
               * Matrix_Scale(2.5,2.5,2.5);
+        }
+        
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, STICK);
         DrawVirtualObject("stick_low_Mesh.016");
@@ -556,29 +667,37 @@ int main(int argc, char* argv[])
 
         for (int i=0;i<3;i++){ //desenha 3 instâncias da lâmpada
             if(i == 0){
-                model = Matrix_Translate(-1.6f,5.1f,0.0f) * Matrix_Scale(1.2,1.2,1.2);
+                model = Matrix_Translate(-1.6f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
             }
             if(i == 1){
-                model = Matrix_Translate(0.4f,5.1f,0.0f) * Matrix_Scale(1.2,1.2,1.2);
+                model = Matrix_Translate(0.4f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
             }
             if(i == 2){
-                model = Matrix_Translate(2.4f,5.1f,0.0f) * Matrix_Scale(1.2,1.2,1.2);
+                model = Matrix_Translate(2.4f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
             }
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, LAMP);
         DrawVirtualObject("hanging_industrial_lamp");
         }
-
+        bool running = false;
         for(int i = 0;i<16;i++){
-            glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(bolas[i].model));
-            glUniform1i(g_object_id_uniform, bolas[i].tipo);
-            DrawVirtualObject("b1_default");
+            if(bolas[i].visible){
+                glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(bolas[i].model));
+                glUniform1i(g_object_id_uniform, bolas[i].tipo);
+                DrawVirtualObject("b1_default");
+                if(i > 0){
+                    running = true;
+                }
+            }
+        }
+        if(!running){
+            //fazer algo para quando o jogador ganha LEMBRAR
         }
 
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
-        TextRendering_ShowEulerAngles(window);
+        //TextRendering_ShowEulerAngles(window);
 
         // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
         TextRendering_ShowProjection(window);
@@ -1181,7 +1300,6 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // g_LastCursorPosY.  Também, setamos a variável
         // g_RightMouseButtonPressed como true, para saber que o usuário está
         // com o botão esquerdo pressionado.
-        glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
         g_RightMouseButtonPressed = true;
     }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
@@ -1246,18 +1364,6 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 
     if (g_RightMouseButtonPressed)
     {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-    
-        // Atualizamos parâmetros da antebraço com os deslocamentos
-        g_ForearmAngleZ -= 0.01f*dx;
-        g_ForearmAngleX += 0.01f*dy;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
     }
 
     if (g_MiddleMouseButtonPressed)
@@ -1337,25 +1443,19 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
     {
-        g_AngleX = 0.0f;
-        g_AngleY = 0.0f;
-        g_AngleZ = 0.0f;
-        g_ForearmAngleX = 0.0f;
-        g_ForearmAngleZ = 0.0f;
-        g_TorsoPositionX = 0.0f;
-        g_TorsoPositionY = 0.0f;
+        camera.change_mode(bolas[0]);
     }
 
     // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
     if (key == GLFW_KEY_P && action == GLFW_PRESS)
     {
-        g_UsePerspectiveProjection = true;
+        camera.PerspectiveProjection = true;
     }
 
     // Se o usuário apertar a tecla O, utilizamos projeção ortográfica.
     if (key == GLFW_KEY_O && action == GLFW_PRESS)
     {
-        g_UsePerspectiveProjection = false;
+        camera.PerspectiveProjection = false;
     }
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
@@ -1476,7 +1576,7 @@ void TextRendering_ShowProjection(GLFWwindow* window)
     float lineheight = TextRendering_LineHeight(window);
     float charwidth = TextRendering_CharWidth(window);
 
-    if ( g_UsePerspectiveProjection )
+    if ( camera.PerspectiveProjection )
         TextRendering_PrintString(window, "Perspective", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
     else
         TextRendering_PrintString(window, "Orthographic", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
