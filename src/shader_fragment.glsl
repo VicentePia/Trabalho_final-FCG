@@ -61,7 +61,7 @@ void main()
     // vértice.
 
     ////////
-    vec4 p = position_model; //MUITO IMPORTANTE trocar para posição do modelo
+    vec4 p = position_world; //MUITO IMPORTANTE trocar para posição do modelo
     ///
 
     // Normal do fragmento atual, interpolada pelo rasterizador a partir das
@@ -69,13 +69,22 @@ void main()
     vec4 n = normalize(normal);
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
+    vec4 l = normalize(vec4(0.0,1.0,0.0,0.0));
 
+    //posição das 3 lâmpadas
+    vec4 pos1 = vec4(-2.0f,-2.5f,0.0f,0.0f);
+    vec4 pos2 = vec4(0.0f,-2.5f,0.0f,0.0f);
+    vec4 pos3 = vec4(2.0f,-2.5f,0.0f,0.0f);
+
+    vec4 lp[3] = vec4[](normalize(p - pos1),normalize(p - pos2),normalize(p - pos3));
+
+
+    float cone = cos(radians(25));
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
 
     // Vetor que define o sentido da reflexão especular ideal.
-    vec4 h = normalize(v + l);
+    vec4 h = vec4(0);
 
     // Coordenadas de textura U e V
     float U = 0.0;
@@ -98,7 +107,7 @@ void main()
         U = texcoords.x;
         V = texcoords.y;
         Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-        Ks0 = vec3(0.4,0.4,0.4);
+        Ks0 = vec3(0.1,0.1,0.1);
         q = 200;
     }
     else if (object_id == LAMP){
@@ -119,13 +128,27 @@ void main()
         // peguei um ponto qualquer da textura, pois ela é completamente branca
     }
 
-
+    vec3 cores[3] = vec3[](vec3(0.0),vec3(0.0),vec3(0.0));
+    float lambert = 0;
+    vec3 blinn_phong_specular_term = vec3(0.0);
     // Equação de Iluminação
-    float lambert = max(0,dot(n,l));
+    for (int i = 0; i <3; i++){
+        lambert = 0;
+        blinn_phong_specular_term = vec3(0.0);
+        if(dot(lp[i],l) > cone){
+            h = normalize(v + lp[i]);
+            lambert = max(0,dot(n,lp[i]));
+            blinn_phong_specular_term  = Ks0 * max(0,pow(dot(n,h),q));
+            cores[i] = Kd0 * (lambert + 0.1) + blinn_phong_specular_term + emmisive;
+        }
+        else{
+            cores[i] = Kd0 * 0.05;
+        }
+        
+    }
+    //color.rgb = Kd0 * (lambert + 0.01) + blinn_phong_specular_term;
 
-    vec3 blinn_phong_specular_term  = Ks0 * max(0.0,pow(dot(n,h),q));
-
-    color.rgb = Kd0 * (lambert + 0.01) + emmisive + blinn_phong_specular_term;
+    color.rgb = cores[0] + cores[1] + cores[2];
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:

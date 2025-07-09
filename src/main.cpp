@@ -29,6 +29,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <iostream>
 
 // Headers das bibliotecas OpenGL
 #include <glad/glad.h>   // Criação de contexto OpenGL 3.3
@@ -189,7 +190,8 @@ public:
     }
 };
 void simulateBalls(std::vector<Ball>& balls, float time,float extraTime);
-
+void Bezier(float t, Ball& bola);
+void CalcBezier(Ball& bola);
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
 void PopMatrix(glm::mat4& M);
@@ -452,6 +454,10 @@ int main(int argc, char* argv[])
     float PastTime = 0.0f; // mede a passagem de tempo no programa
     float extraTime = 0.0f; //tempo extra acrescentado quando a bola branca é derrubada
 
+    float ballTime = 0.0f; // usado para calcular a curva de bezier da bola
+    bolas[0].p[3] = glm::vec3(2.5f,1.67f,0.0f);
+
+
     float strenght = 0; // o quão forte vai ser a tacada
     bool mudaCamera = false; //força troca da câmera após tacada
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
@@ -465,7 +471,7 @@ int main(int argc, char* argv[])
         // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
         //
         //           R     G     B     A
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
         // "Pintamos" todos os pixels do framebuffer com a cor definida acima,
         // e também resetamos todos os pixels do Z-buffer (depth buffer).
@@ -511,20 +517,22 @@ int main(int argc, char* argv[])
             }
         }
 
-        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS){
-                bolas[0].speed = glm::vec3(-1,0,0);
-        }
-        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS){
-                bolas[0].speed = glm::vec3(1,0,0);
-        }
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS){
-                bolas[0].speed = glm::vec3(0,0,-1);
-        }
-        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS){
-                bolas[0].speed = glm::vec3(0,0,1);
+        if(!bolas[0].animation){
+            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS){
+                    bolas[0].speed = glm::vec3(-1,0,0);
+            }
+            if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS){
+                    bolas[0].speed = glm::vec3(1,0,0);
+            }
+            if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS){
+                    bolas[0].speed = glm::vec3(0,0,-1);
+            }
+            if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS){
+                    bolas[0].speed = glm::vec3(0,0,1);
+            }
         }
 
-        if(camera.cam_mode == 2){
+        if(camera.cam_mode == 2 && !bolas[0].animation){
             if(g_RightMouseButtonPressed){
                 strenght += currentTime;
                 if(strenght > 3) strenght = 3.0f;
@@ -667,17 +675,37 @@ int main(int argc, char* argv[])
 
         for (int i=0;i<3;i++){ //desenha 3 instâncias da lâmpada
             if(i == 0){
-                model = Matrix_Translate(-1.6f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
+                model = Matrix_Translate(-2.0f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
             }
             if(i == 1){
-                model = Matrix_Translate(0.4f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
+                model = Matrix_Translate(0.0f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
             }
             if(i == 2){
-                model = Matrix_Translate(2.4f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
+                model = Matrix_Translate(2.0f,5.9f,0.0f) * Matrix_Scale(1.1,1.1,1.1);
             }
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, LAMP);
         DrawVirtualObject("hanging_industrial_lamp");
+        }
+
+        if(bolas[0].animation){
+            if(bolas[0].animationStart){
+                bolas[0].animationStart = false;
+                ballTime = glfwGetTime();
+                CalcBezier(bolas[0]);
+                Bezier(0.0,bolas[0]);
+            }
+            else{
+                float newTime = glfwGetTime();
+                float Temp = newTime - ballTime;
+
+                Temp = Temp/4.0f;
+                if(Temp >= 1){
+                    bolas[0].animation = false;
+                    Temp = 1.0f;
+                }
+                Bezier(Temp,bolas[0]);
+            }
         }
         bool running = false;
         for(int i = 0;i<16;i++){
@@ -691,7 +719,9 @@ int main(int argc, char* argv[])
             }
         }
         if(!running){
-            //fazer algo para quando o jogador ganha LEMBRAR
+            float time = PastTime + extraTime;
+            std::cout << "parabens, voce levou apenas " << time << " segundos." <<std::endl;
+            glfwSetWindowShouldClose(window, GL_TRUE);
         }
 
 
@@ -1464,6 +1494,13 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_ShowInfoText = !g_ShowInfoText;
     }
 
+    if (key == GLFW_KEY_U && action == GLFW_PRESS)
+    {
+        for(int i = 1; i < 16; i++){
+            bolas[i].visible = false;
+        }
+    }
+
     // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
     {
@@ -1785,6 +1822,28 @@ void PrintObjModelInfo(ObjModel* model)
     }
     printf("\n");
   }
+}
+
+void Bezier(float t, Ball& bola)
+{
+    bola.setPosition(
+        bola.p[0] * float(pow(1.0f-t,3)) +
+        3.0f * bola.p[1] * t * float(pow(1.0f-t,2)) +
+        3.0f * bola.p[2] * t * t * (1.0f-t) +
+        bola.p[3] * t * t * t);
+}
+
+void CalcBezier(Ball& bola){
+
+    bola.p[0] = bola.getPosition();
+    glm::vec3 dir = bola.p[3] - bola.p[0];
+
+    glm::vec3 up = glm::vec3(0.0f, 0.5f, 0.0f);
+
+    glm::vec3 mid = bola.p[0] + dir * 0.5f + up; //0.
+
+    bola.p[1] = bola.p[0] + (mid - bola.p[0]) * 0.5f;
+    bola.p[2] = bola.p[3] + (mid - bola.p[3]) * 0.5f;
 }
 
 // set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null

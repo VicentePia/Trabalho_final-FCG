@@ -6,8 +6,12 @@ struct Ball
     glm::mat4 model;
     int tipo = 4; //4 = G_BALL 5 = W_BALL
     bool visible = true;
+    bool animation = false; //provavelmente vai ser exclusivo para a bola branca
+    bool animationStart = false;
     float radius = 0.1f;
     glm::vec3 speed = glm::vec3(0);
+
+    glm::vec3 p[4];
 
     glm::vec3 getPosition(){
         return glm::vec3(model[3]); //auxilia para os cálculos de colisão

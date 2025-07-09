@@ -2,7 +2,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 #include <vector>
-#include <iostream>
 
 glm::mat4 Matrix_Rotate_Y(float angle);
 
@@ -56,10 +55,13 @@ void resolveWallCollision(Ball& b,float extraTime){
         if(position.z < -1.34f || position.z > 1.28f){
             b.visible = false;
             if(b.tipo == 5){
-                extraTime += 10;
-                b.setPosition(glm::vec3(2.5f,1.67f,0.0f));
-                b.visible = true;
-                b.speed = glm::vec3(0);
+                if(!b.animation){
+                    extraTime += 10;
+                    b.visible = true;
+                    b.speed = glm::vec3(0);
+                    b.animation = true;
+                    b.animationStart = true;
+                }
             }
         }
         else{
@@ -73,10 +75,13 @@ void resolveWallCollision(Ball& b,float extraTime){
         if(position.z < -1.34f || position.z > 1.28f){
             b.visible = false;
             if(b.tipo == 5){
-                extraTime += 10;
-                b.setPosition(glm::vec3(2.5f,1.67f,0.0f));
-                b.visible = true;
-                b.speed = glm::vec3(0);
+                if(!b.animation){
+                    extraTime += 10;
+                    b.visible = true;
+                    b.speed = glm::vec3(0);
+                    b.animation = true;
+                    b.animationStart = true;
+                }
             }
         }
         else{
@@ -89,10 +94,13 @@ void resolveWallCollision(Ball& b,float extraTime){
         (position.x < -2.15f) || (position.x > 3.35f)){
             b.visible = false;
             if(b.tipo == 5){
-                extraTime += 10;
-                b.setPosition(glm::vec3(2.5f,1.67f,0.0f));
-                b.visible = true;
-                b.speed = glm::vec3(0);
+                if(!b.animation){
+                    extraTime += 10;
+                    b.visible = true;
+                    b.speed = glm::vec3(0);
+                    b.animation = true;
+                    b.animationStart = true;
+                }
             }
         }
         else{
@@ -105,10 +113,13 @@ void resolveWallCollision(Ball& b,float extraTime){
         (position.x < -2.15f) || (position.x > 3.35f)){
             b.visible = false;
             if(b.tipo == 5){
-                extraTime += 10;
-                b.setPosition(glm::vec3(2.5f,1.67f,0.0f));
-                b.visible = true;
-                b.speed = glm::vec3(0);
+                if(!b.animation){
+                    extraTime += 10;
+                    b.visible = true;
+                    b.speed = glm::vec3(0);
+                    b.animation = true;
+                    b.animationStart = true;
+                }
             }
         }
         else{
