@@ -144,7 +144,6 @@ public:
         }
         if (x == 1){
             cam_mode = 1;
-            //FONTE: chatgpt me ajudou na linha abaixo
             g_CameraTheta = atan2(view_vector.x, view_vector.z);
             PerspectiveProjection = true;
         }
@@ -189,9 +188,11 @@ public:
         view_vector = glm::normalize(lookat_l - position_c);
     }
 };
-void simulateBalls(std::vector<Ball>& balls, float time,float extraTime);
+void simulateBalls(std::vector<Ball>& balls, float time,float& extraTime);
 void Bezier(float t, Ball& bola);
 void CalcBezier(Ball& bola);
+void resolveCamCollision(glm::vec4& pos);
+
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
 void PopMatrix(glm::mat4& M);
@@ -339,7 +340,7 @@ int main(int argc, char* argv[])
     // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
     // de pixels, e com título "INF01047 ...".
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "INF01047 - Seu Cartao - Seu Nome", NULL, NULL);
+    window = glfwCreateWindow(800, 600, "Sinuca", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -384,7 +385,7 @@ int main(int argc, char* argv[])
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/dark_wood_diff_1k.jpg");                    // TextureImage0
+    LoadTextureImage("../../data/dirty_concrete_diff_2k.jpg");                    // TextureImage0
     LoadTextureImage("../../data/pool_table_base.png");                      // TextureImage1
     LoadTextureImage("../../data/hanging_industrial_lamp_diff_1k.jpg");      // TextureImage2
     LoadTextureImage("../../data/hanging_industrial_lamp_emissive_1k.png");  // TextureImage3
@@ -515,21 +516,8 @@ int main(int argc, char* argv[])
             if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
                 camera.position_c += -u * camera.cam_speed * currentTime;
             }
-        }
 
-        if(!bolas[0].animation){
-            if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS){
-                    bolas[0].speed = glm::vec3(-1,0,0);
-            }
-            if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS){
-                    bolas[0].speed = glm::vec3(1,0,0);
-            }
-            if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS){
-                    bolas[0].speed = glm::vec3(0,0,-1);
-            }
-            if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS){
-                    bolas[0].speed = glm::vec3(0,0,1);
-            }
+            resolveCamCollision(camera.position_c);
         }
 
         if(camera.cam_mode == 2 && !bolas[0].animation){
@@ -699,7 +687,7 @@ int main(int argc, char* argv[])
                 float newTime = glfwGetTime();
                 float Temp = newTime - ballTime;
 
-                Temp = Temp/4.0f;
+                Temp = Temp/20.0f;
                 if(Temp >= 1){
                     bolas[0].animation = false;
                     Temp = 1.0f;

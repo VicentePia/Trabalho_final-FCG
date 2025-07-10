@@ -23,21 +23,21 @@ void resolveBallCollision(Ball& a, Ball& b) {
     glm::vec3 delta = b.getPosition() - a.getPosition();
     float dist = glm::length(delta);
 
-    if (dist == 0.0f) return; // impede divisao por zero
+    if (dist == 0.0f) return;
 
     glm::vec3 normal = delta / dist;
     glm::vec3 relativeVelocity = a.speed - b.speed;
     float velAlongNormal = glm::dot(relativeVelocity, normal);
 
-    //FONTE: recebi auxílio no resto da função
     float restitution = 0.9f; // colisão quase perfeitamente elástica
+    //FONTE: recebi auxílio do chatgpt no linha abaixo
     float impulse = -(1 + restitution) * velAlongNormal / 2.0f;
     glm::vec3 impulseVec = impulse * normal;
 
     a.speed += impulseVec;
     b.speed -= impulseVec;
 
-    // Se uma estiver em cima da outra, desloca ambas o suficiente para estarem no máximo se tocando
+    // Se uma estiver em cima da outra, desloca ambas o suficiente para estarem no máximo se "tocando"
     float overlap = (a.radius + b.radius) - dist;
     glm::vec3 correction = normal * (overlap / 2.0f);
     a.setPosition(a.getPosition() - correction);
@@ -45,7 +45,7 @@ void resolveBallCollision(Ball& a, Ball& b) {
 }
 
 //teste esfera-plano
-void resolveWallCollision(Ball& b,float extraTime){
+void resolveWallCollision(Ball& b,float& extraTime){
     if(b.speed == glm::vec3(0)) return;
 
     glm::vec3 position = b.getPosition();
@@ -66,8 +66,6 @@ void resolveWallCollision(Ball& b,float extraTime){
         }
         else{
             wallNormal = glm::vec3(1,0,0);
-            //FONTE: estava com dificuldade para a linha abaixo, chatpt me ajudou a fazer ela
-            //ela foi basicamente copiada para as outras paredes também
             b.speed = b.speed - 2.0f * glm::dot(b.speed,wallNormal) * wallNormal;
         }
     }
@@ -130,8 +128,7 @@ void resolveWallCollision(Ball& b,float extraTime){
 }
 
 // Simula a colisão das bolas entre si e com a parede
-void simulateBalls(std::vector<Ball>& balls, float time,float extraTime) {
-    // First update all positions
+void simulateBalls(std::vector<Ball>& balls, float time,float& extraTime) {
     for (auto& ball : balls) {
         ball.speed *= (1 - time);
         if (glm::length(ball.speed) < 0.05){
@@ -141,14 +138,38 @@ void simulateBalls(std::vector<Ball>& balls, float time,float extraTime) {
         ball.update(time);
     }
 
-    // Then check all unique pairs for collisions
     for (size_t i = 0; i < balls.size(); ++i) {
         for (size_t j = i + 1; j < balls.size(); ++j) {
             if (areBallsColliding(balls[i], balls[j])) {
-                if(balls[i].visible & balls[j].visible)
+                if(balls[i].visible && balls[j].visible)
                 resolveBallCollision(balls[i], balls[j]);
             }
         }
         resolveWallCollision(balls[i],extraTime);
+    }
+}
+
+//teste ponto-plano
+void resolveCamCollision(glm::vec4& pos){
+    //cada if statement testa para um plano diferente
+    int max = 6;
+    int min = -6;
+    if(pos.x > max){
+        pos.x = max;
+    }
+    if(pos.y > max){
+        pos.y = max;
+    }
+    if(pos.z > max){
+        pos.z = max;
+    }
+    if(pos.x < min){
+        pos.x = min;
+    }
+    if(pos.y < 0){
+        pos.y = 0;
+    }
+    if(pos.z < min){
+        pos.z = min;
     }
 }

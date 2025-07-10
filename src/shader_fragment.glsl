@@ -13,6 +13,9 @@ in vec4 position_model;
 // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
 in vec2 texcoords;
 
+// Cores do plano usando Gouraud
+in vec3 gouraudColor;
+
 // Matrizes computadas no código C++ e enviadas para a GPU
 uniform mat4 model;
 uniform mat4 view;
@@ -69,17 +72,17 @@ void main()
     vec4 n = normalize(normal);
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(vec4(0.0,1.0,0.0,0.0));
+    vec4 l = normalize(vec4(0.0,-1.0,0.0,0.0));
 
     //posição das 3 lâmpadas
-    vec4 pos1 = vec4(-2.0f,-2.5f,0.0f,0.0f);
-    vec4 pos2 = vec4(0.0f,-2.5f,0.0f,0.0f);
-    vec4 pos3 = vec4(2.0f,-2.5f,0.0f,0.0f);
+    vec4 pos1 = vec4(-2.0f,6.5f,0.0f,0.0f);
+    vec4 pos2 = vec4(0.0f,6.5f,0.0f,0.0f);
+    vec4 pos3 = vec4(2.0f,6.5f,0.0f,0.0f);
 
-    vec4 lp[3] = vec4[](normalize(p - pos1),normalize(p - pos2),normalize(p - pos3));
+    vec4 lp[3] = vec4[](normalize(pos1 - p),normalize(pos2 - p),normalize(pos3 - p));
 
 
-    float cone = cos(radians(25));
+    float cone = cos(radians(22));
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
 
@@ -100,15 +103,6 @@ void main()
         Kd0 = texture(TextureImage1, texcoords).rgb;
         Ks0 = vec3(0);
 
-    }
-    else if ( object_id == PLANE)
-    {
-        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
-        U = texcoords.x;
-        V = texcoords.y;
-        Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-        Ks0 = vec3(0.1,0.1,0.1);
-        q = 200;
     }
     else if (object_id == LAMP){
         Kd0 = texture(TextureImage2, texcoords).rgb;
@@ -135,21 +129,22 @@ void main()
     for (int i = 0; i <3; i++){
         lambert = 0;
         blinn_phong_specular_term = vec3(0.0);
-        if(dot(lp[i],l) > cone){
+        if(dot(lp[i],-l) > cone && object_id != PLANE){
             h = normalize(v + lp[i]);
             lambert = max(0,dot(n,lp[i]));
             blinn_phong_specular_term  = Ks0 * max(0,pow(dot(n,h),q));
             cores[i] = Kd0 * (lambert + 0.1) + blinn_phong_specular_term + emmisive;
         }
         else{
-            cores[i] = Kd0 * 0.05;
+            cores[i] = Kd0 * 0.07;
         }
         
     }
-    //color.rgb = Kd0 * (lambert + 0.01) + blinn_phong_specular_term;
-
     color.rgb = cores[0] + cores[1] + cores[2];
 
+    if(object_id == PLANE){
+        color.rgb = gouraudColor;
+    }
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
     // 1) Habilitar a operação de "blending" de OpenGL logo antes de realizar o
